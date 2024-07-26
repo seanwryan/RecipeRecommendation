@@ -4,7 +4,6 @@ import numpy as np
 import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.decomposition import TruncatedSVD
 from fuzzywuzzy import process
 
 # Define the API key (for TheMealDB, the test key is "1")
@@ -17,30 +16,23 @@ def fetch_recipes(api_key, letter='a'):
     if response.status_code == 200:
         return response.json().get('meals', [])
     else:
-        st.error(f"Error fetching recipes for letter {letter}: {response.status_code}")
+        print(f"Error fetching recipes for letter {letter}: {response.status_code}")
         return []
 
 # Fetch details for all recipes starting with letters 'a' to 'z'
 all_recipes = []
 for letter in 'abcdefghijklmnopqrstuvwxyz':
     recipes = fetch_recipes(api_key, letter=letter)
-    if recipes:  # Only extend if there are recipes returned
+    if recipes:
         all_recipes.extend(recipes)
 
-# Check if any recipes were fetched
-if not all_recipes:
-    st.error("No recipes were fetched. Please check the API response or try again later.")
-else:
-    df_recipes = pd.DataFrame(all_recipes)
-
-# Rename columns for consistency
+df_recipes = pd.DataFrame(all_recipes)
 df_recipes.rename(columns={
     'idMeal': 'id', 'strMeal': 'title', 'strCategory': 'category',
     'strArea': 'area', 'strInstructions': 'instructions',
     'strMealThumb': 'image', 'strTags': 'tags'
 }, inplace=True)
 
-# Function to extract ingredients from TheMealDB format
 def extract_ingredients(row):
     ingredients = []
     for i in range(1, 21):
@@ -49,7 +41,6 @@ def extract_ingredients(row):
             ingredients.append(ingredient.strip())
     return ingredients
 
-# Extract ingredients and clean data
 df_recipes['ingredients'] = df_recipes.apply(extract_ingredients, axis=1)
 df_recipes = df_recipes.drop(columns=[f'strIngredient{i}' for i in range(1, 21)])
 df_recipes_clean = df_recipes[[
@@ -84,11 +75,11 @@ def get_content_based_recommendations(title, cosine_sim, df, top_n=5):
     normalized_title = normalize_title(title)
     if normalized_title not in df['title'].values:
         suggestions = suggest_similar_titles(normalized_title, df, threshold=50)
-        st.warning(f"Recipe title '{title}' not found in the dataset.")
+        st.write(f"Recipe title '{title}' not found in the dataset.")
         if suggestions:
             st.write("Did you mean one of these?")
             for suggestion in suggestions:
-                st.write(f" - {suggestion[0]} (Confidence: {suggestion[1]}%)")
+                st.write(f" - {suggestion[0]}")
         return pd.DataFrame()  # Return an empty DataFrame
 
     # Proceed with finding the recommendations
@@ -97,22 +88,23 @@ def get_content_based_recommendations(title, cosine_sim, df, top_n=5):
     sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
     sim_scores = sim_scores[1:top_n+1]
     recipe_indices = [i[0] for i in sim_scores]
-    return df.iloc[recipe_indices][['title', 'category', 'area', 'tags', 'ingredients']]
+    return df.iloc[recipe_indices][['title', 'category', 'area', 'tags', 'ingredients', 'image']]
 
 # Streamlit UI
-st.title('Recipe Recommendation System')
+st.title("Recipe Recommendation System")
+st.write("Get Recipe Recommendations")
 
-st.header('Get Recipe Recommendations')
-recipe_title = st.text_input('Enter a recipe title')
+input_title = st.text_input("Enter a recipe title", "Pasta")
+recommendations = get_content_based_recommendations(input_title, cosine_sim, df_recipes_clean)
 
-if recipe_title:
-    recommendations = get_content_based_recommendations(recipe_title, cosine_sim, df_recipes_clean)
-    if not recommendations.empty:
-        st.write(recommendations)
-    else:
-        st.write("No recommendations available.")
-
-# Example usage: Get recommendations for a specific recipe title
-st.write("\nExample usage: Get recommendations for a specific recipe title")
-recommendations = get_content_based_recommendations('Arrabiata', cosine_sim, df_recipes_clean)
-st.write(recommendations)
+if not recommendations.empty:
+    st.write("Recommended Recipes:")
+    for _, row in recommendations.iterrows():
+        st.write(f"### {row['title']}")
+        st.write(f"Category: {row['category']}")
+        st.write(f"Area: {row['area']}")
+        st.write(f"Tags: {row['tags']}")
+        st.write(f"Ingredients: {', '.join(row['ingredients'])}")
+        if row['image']:
+            st.image(row['image'], width=200)
+        st.write("---")
