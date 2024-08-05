@@ -4,7 +4,6 @@ import numpy as np
 import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.decomposition import TruncatedSVD
 from fuzzywuzzy import process
 
 # Define the API key (for TheMealDB, the test key is "1")
@@ -63,10 +62,6 @@ df_recipes_clean = df_recipes[[
     'id', 'title', 'category', 'area', 'instructions', 'tags', 'image', 'ingredients'
 ]]
 
-# Display available columns and basic data
-st.write(df_recipes_clean.columns)
-st.write(df_recipes_clean.head())
-
 # Combine textual features
 df_recipes_clean['combined_features'] = df_recipes_clean.apply(
     lambda x: f"{x['title']} {' '.join(x['ingredients'])} {x['category']} {x['area']} {x['tags'] if x['tags'] else ''}", axis=1
@@ -108,7 +103,7 @@ def get_content_based_recommendations(title, cosine_sim, df, top_n=5):
     sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
     sim_scores = sim_scores[1:top_n+1]
     recipe_indices = [i[0] for i in sim_scores]
-    return df.iloc[recipe_indices][['title', 'category', 'area', 'tags', 'ingredients']]
+    return df.iloc[recipe_indices][['title', 'category', 'area', 'tags', 'ingredients', 'instructions', 'image']]
 
 # UI elements for user input
 st.title("Recipe Recommendation System")
@@ -119,11 +114,13 @@ if title:
     recommendations = get_content_based_recommendations(title, cosine_sim, df_recipes_clean)
     if not recommendations.empty:
         for _, row in recommendations.iterrows():
-            st.image(row['image'], width=100)
-            st.markdown(f"**{row['title']}**")
-            st.write(f"Category: {row['category']}")
-            st.write(f"Area: {row['area']}")
-            st.write(f"Ingredients: {', '.join(row['ingredients'])}")
+            st.image(row['image'], width=200)
+            st.markdown(f"### {row['title']}")
+            st.write(f"**Category:** {row['category']}")
+            st.write(f"**Area:** {row['area']}")
+            st.write(f"**Tags:** {row['tags']}")
+            st.write(f"**Ingredients:** {', '.join(row['ingredients'])}")
+            st.write(f"**Instructions:** {row['instructions']}")
             st.write("---")
     else:
         st.write("No recommendations available.")
